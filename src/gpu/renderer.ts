@@ -43,6 +43,18 @@ function link(gl: WebGL2RenderingContext, vsSrc: string, fsSrc: string): WebGLPr
 
 interface Target { fbo: WebGLFramebuffer; tex: WebGLTexture; w: number; h: number }
 
+/** Pixel rectangle in canvas space, origin bottom-left as WebGL expects. */
+export interface Rect { x: number; y: number; width: number; height: number }
+
+export interface RenderOptions {
+  /** which cached LUT to use; omit to use the single LUT set via setLut() */
+  lutKey?: string | null;
+  /** where to draw inside the canvas; defaults to the whole canvas */
+  viewport?: Rect;
+  /** restrict drawing to this rectangle, for the split-view divider */
+  scissor?: Rect;
+}
+
 export class Renderer {
   private gl: WebGL2RenderingContext;
   private develop: WebGLProgram;
@@ -51,6 +63,8 @@ export class Renderer {
   private quad: WebGLVertexArrayObject;
   private imageTex: WebGLTexture | null = null;
   private lutTex: WebGLTexture | null = null;
+  /** LUTs stay uploaded once fetched, so compare views can switch per draw. */
+  private lutCache = new Map<string, { tex: WebGLTexture; size: number }>();
   /**
    * A 1x1 3D texture that is bound whenever no LUT is active. WebGL2 rejects a
    * draw where two samplers of different types resolve to the same texture unit,
@@ -137,6 +151,39 @@ export class Renderer {
     this.disposeTargets();
   }
 
+  /**
+   * Upload a LUT under a key and keep it. Used by the compare views, which draw
+   * several simulations in one frame and so cannot rely on a single bound LUT.
+   */
+  uploadLut(key: string, lut: { size: number; data: Float32Array }) {
+    if (this.lutCache.has(key)) return;
+    const tex = this.createLutTexture(lut);
+    this.lutCache.set(key, { tex, size: lut.size });
+  }
+
+  hasLut(key: string) { return this.lutCache.has(key); }
+
+  private createLutTexture(lut: { size: number; data: Float32Array }): WebGLTexture {
+    const gl = this.gl;
+    const rgba = new Float32Array(lut.size ** 3 * 4);
+    for (let i = 0, sp = 0, d = 0; i < lut.size ** 3; i++, sp += 3, d += 4) {
+      rgba[d] = lut.data[sp];
+      rgba[d + 1] = lut.data[sp + 1];
+      rgba[d + 2] = lut.data[sp + 2];
+      rgba[d + 3] = 1;
+    }
+    const tex = gl.createTexture()!;
+    gl.bindTexture(gl.TEXTURE_3D, tex);
+    gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE);
+    gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGBA16F, lut.size, lut.size, lut.size, 0,
+      gl.RGBA, gl.FLOAT, rgba);
+    return tex;
+  }
+
   /** Upload a film-simulation LUT as a 3D texture. */
   setLut(lut: { size: number; data: Float32Array } | null) {
     const gl = this.gl;
@@ -199,13 +246,24 @@ export class Renderer {
     this.targets = [];
   }
 
-  private drawTo(target: Target | null, w: number, h: number) {
+  private drawTo(target: Target | null, w: number, h: number, vp?: Rect) {
     const gl = this.gl;
     gl.bindFramebuffer(gl.FRAMEBUFFER, target ? target.fbo : null);
-    gl.viewport(0, 0, w, h);
+    if (vp && !target) gl.viewport(vp.x, vp.y, vp.width, vp.height);
+    else gl.viewport(0, 0, w, h);
     gl.bindVertexArray(this.quad);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.bindVertexArray(null);
+  }
+
+  /** Clear the whole canvas — call once before a multi-recipe frame. */
+  clear() {
+    const gl = this.gl;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.disable(gl.SCISSOR_TEST);
+    gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
+    gl.clearColor(0, 0, 0, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
   }
 
   /**
@@ -213,9 +271,20 @@ export class Renderer {
    * `viewport` lets the caller place the result inside a larger canvas, which
    * is how the N-up compare grid draws several recipes at once.
    */
-  render(params: RenderParams) {
+  render(params: RenderParams, opts: RenderOptions = {}) {
     const gl = this.gl;
     if (!this.imageTex) return;
+
+    const cached = opts.lutKey ? this.lutCache.get(opts.lutKey) : null;
+    const lutTex = cached?.tex ?? (opts.lutKey === undefined ? this.lutTex : null);
+    const lutSize = cached?.size ?? this.lutSize;
+
+    if (opts.scissor) {
+      gl.enable(gl.SCISSOR_TEST);
+      gl.scissor(opts.scissor.x, opts.scissor.y, opts.scissor.width, opts.scissor.height);
+    } else {
+      gl.disable(gl.SCISSOR_TEST);
+    }
 
     const { width: outW, height: outH } = this.outputSize;
     const needsDetail =
@@ -232,10 +301,10 @@ export class Renderer {
     gl.bindTexture(gl.TEXTURE_2D, this.imageTex);
     gl.uniform1i(u('uImage'), 0);
     gl.activeTexture(gl.TEXTURE1);
-    gl.bindTexture(gl.TEXTURE_3D, this.lutTex ?? this.dummyLut);
+    gl.bindTexture(gl.TEXTURE_3D, lutTex ?? this.dummyLut);
     gl.uniform1i(u('uLut'), 1);
-    gl.uniform1i(u('uHasLut'), this.lutTex ? 1 : 0);
-    gl.uniform1f(u('uLutSize'), this.lutSize || 2);
+    gl.uniform1i(u('uHasLut'), lutTex ? 1 : 0);
+    gl.uniform1f(u('uLutSize'), lutSize || 2);
     gl.uniform1f(u('uExposure'), params.exposure);
     gl.uniform1f(u('uWbRed'), params.wbRed);
     gl.uniform1f(u('uWbBlue'), params.wbBlue);
@@ -256,7 +325,8 @@ export class Renderer {
     gl.uniform2f(u('uCropSize'), this.crop.width / this.imgW, this.crop.height / this.imgH);
 
     if (!needsDetail) {
-      this.drawTo(null, outW, outH);
+      this.drawTo(null, outW, outH, opts.viewport);
+      gl.disable(gl.SCISSOR_TEST);
       return;
     }
     this.drawTo(this.targets[0], outW, outH);
@@ -294,7 +364,8 @@ export class Renderer {
     gl.uniform1f(du('uSharpness'), params.sharpness);
     gl.uniform1f(du('uClarity'), params.clarity);
     gl.uniform1f(du('uNoiseReduction'), params.noiseReduction);
-    this.drawTo(null, outW, outH);
+    this.drawTo(null, outW, outH, opts.viewport);
+    gl.disable(gl.SCISSOR_TEST);
   }
 
   dispose() {
@@ -302,6 +373,8 @@ export class Renderer {
     this.disposeTargets();
     if (this.imageTex) gl.deleteTexture(this.imageTex);
     if (this.lutTex) gl.deleteTexture(this.lutTex);
+    for (const { tex } of this.lutCache.values()) gl.deleteTexture(tex);
+    this.lutCache.clear();
     gl.deleteTexture(this.dummyLut);
     gl.deleteProgram(this.develop);
     gl.deleteProgram(this.blur);

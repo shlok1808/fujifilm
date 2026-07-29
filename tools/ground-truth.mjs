@@ -44,7 +44,7 @@ for (const file of files) {
   // reveal the camera JPEG overlay so we can sample it
   const toggle = page.locator('.viewer .toggle');
   if (!(await toggle.count())) { console.log(`${file}: no embedded JPEG, skipped`); continue; }
-  await toggle.dispatchEvent('mousedown');
+  await toggle.dispatchEvent('pointerdown');
   await page.waitForFunction(() => {
     const i = document.querySelector('.viewer .reference');
     return i && i.complete && i.naturalWidth > 0;
@@ -128,7 +128,7 @@ for (const file of files) {
       oursB: acc.ob / acc.n, theirsB: acc.tb / acc.n,
     };
   }, [SAMPLE_W, SAMPLE_H]);
-  await toggle.dispatchEvent('mouseup');
+  await toggle.dispatchEvent('pointerup');
 
   rows.push({ file: file.split('/').pop(), sim: meta.sim, ...result });
 }

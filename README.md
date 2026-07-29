@@ -4,7 +4,9 @@ Upload a Fujifilm `.RAF` file and see how it looks under different film simulati
 recipes — pick presets and compare them side by side, or drive the underlying
 settings yourself and watch the photo re-render live.
 
-Everything runs in your browser. No upload, no account, no server, and **no camera
+Three ways to look at a photo: a single live-adjustable render, an N-up **compare
+grid** of up to four recipes, and a draggable **split slider** between two. All of it
+runs in your browser — no upload, no account, no server, and **no camera
 required** — unlike X RAW STUDIO or tethered tools like Focal Click, this renders the
 looks itself, so it works with bodies that have no in-camera RAW reprocessing.
 
@@ -93,6 +95,31 @@ X-T1 across every simulation and every parameter value, then derive LUTs and fit
 real parameter curves from your own sensor. That replaces guesses with measurements,
 and should be the single biggest accuracy win available.
 
+## Features
+
+- **Single / Compare / Slider** views. The RAW is decoded once and every pane is a GPU
+  draw call against that same texture, so a four-way comparison costs no more decoding
+  than a single view.
+- **Reads the recipe a frame was shot with** from the Fujifilm MakerNote and starts you
+  there.
+- **Hold to compare against the camera's own JPEG** — the honest reference.
+- **Paste a recipe** in the format Fuji X Weekly and similar sites publish
+  ("Highlight: +1", "Dynamic Range: DR200", …) and it is parsed into the sliders.
+- **Share links** encode the recipe in the URL fragment, so settings travel without
+  ever reaching a server.
+- **Full-resolution JPEG export**, which re-decodes with the slow X-Trans demosaic.
+- Parameters your body never had (Clarity, Grain, Color Chrome) are marked rather than
+  hidden, and still render — so a modern X-Trans V recipe can be applied to an X-T1 file.
+
+## Known limitations
+
+- **Export is memory-hungry.** Rendering a 16MP frame uploads it as float RGBA, which
+  needs a few hundred MB transiently. Fine on desktop; it may fail on older phones.
+- **ACROS / Monochrome / Sepia** render through PROVIA plus a channel mixer, because the
+  profile pack has no monochrome LUTs. See below.
+- Recipes using simulations your camera lacks are rendered anyway, which is a feature,
+  but they are approximations of approximations.
+
 ## Development
 
 ```bash
@@ -105,6 +132,10 @@ Verification scripts (need the dev server running):
 ```bash
 node tools/smoke.mjs             # decode a real RAF end to end, screenshot it
 node tools/orientation-check.mjs # assert the image isn't upside down
+node tools/modes-check.mjs       # screenshot all three view modes
+node tools/features-check.mjs    # paste, share round trip, full-res export
+node tools/sim-compare.mjs       # confirm the simulations actually differ
+node tools/ground-truth.mjs      # dE against the camera's own JPEG
 ```
 
 Both point at a local RAF path you'll want to change to your own file.

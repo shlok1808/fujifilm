@@ -64,6 +64,8 @@ function activeArea(meta: LibRawCropMeta | null, width: number, height: number, 
 }
 
 export interface LoadedRaf {
+  /** kept so export can re-decode at full resolution on demand */
+  file: File;
   fileName: string;
   model: string;
   firmware: string;
@@ -129,6 +131,7 @@ export async function loadRaf(file: File): Promise<LoadedRaf> {
   const preview = await decode(bytes, PREVIEW_SETTINGS);
 
   return {
+    file,
     fileName: file.name,
     model: header.model,
     firmware: header.firmware,
