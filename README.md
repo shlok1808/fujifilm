@@ -78,6 +78,30 @@ node tools/orientation-check.mjs # assert the image isn't upside down
 
 Both point at a local RAF path you'll want to change to your own file.
 
+## Deployment
+
+Hosted on **Vercel** as a fully static site — there is no backend, no serverless
+function and no environment config. Vercel auto-detects Vite, so no `vercel.json`
+is needed:
+
+| setting | value |
+|---|---|
+| framework preset | Vite |
+| build command | `npm run build` |
+| output directory | `dist` |
+
+Either import the repo at [vercel.com/new](https://vercel.com/new), or from a clone:
+
+```bash
+npm i -g vercel
+vercel login
+vercel --prod
+```
+
+The `.wasm` decoder is content-hashed by Vite, so it is safe to cache immutably —
+Vercel does this for `/assets/*` automatically. The app is single-threaded on
+purpose, so it needs no `COOP`/`COEP` headers.
+
 ## Credits
 
 Film simulation LUTs from [abpy/FujifilmCameraProfiles](https://github.com/abpy/FujifilmCameraProfiles),
