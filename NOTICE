@@ -1,0 +1,42 @@
+Third-party content used by Fuji Recipe Lab
+===========================================
+
+Film simulation LUTs
+--------------------
+Source:  https://github.com/abpy/FujifilmCameraProfiles
+Author:  abpy
+Licence: Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International
+         (CC BY-NC-SA 4.0) — https://creativecommons.org/licenses/by-nc-sa/4.0/
+
+These profiles are based on the Fujifilm camera-matching profiles shipped with
+Adobe Camera Raw / Lightroom, generated from an X-Trans IV body.
+
+Consequences of that licence for this project:
+  * attribution is required and given here and in the app UI;
+  * the LUTs and any derivatives of them must stay under CC BY-NC-SA 4.0;
+  * this application must not be sold or otherwise commercialised while it
+    ships these LUTs.
+
+Photographs produced with these profiles are the photographer's own work and are
+not derivative works of the profiles.
+
+Not used, deliberately
+----------------------
+Stuart Sowerby's X-Trans II LUT set (https://blog.sowerby.me/fuji-film-simulation-profiles/)
+is the closer sensor-generation match for the X-T1, but is published "All Rights
+Reserved" with no redistribution licence, so it is not bundled here.
+
+
+RAW decoding
+------------
+LibRaw — https://www.libraw.org/ — dual-licensed LGPL 2.1 / CDDL 1.0,
+consumed as WebAssembly via libraw-wasm (https://github.com/ybouane/LibRaw-Wasm).
+
+
+Trademarks
+----------
+"Fujifilm", "PROVIA", "Velvia", "ASTIA", "ACROS", "ETERNA", "Classic Chrome",
+"REALA ACE" and related names are trademarks of FUJIFILM Corporation. They are
+used here solely to identify which look is being emulated. This project is not
+affiliated with, authorised by, or endorsed by FUJIFILM Corporation, and contains
+no Fujifilm software.
