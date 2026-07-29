@@ -33,7 +33,7 @@ uniform float uLutSize;
 uniform float uExposure;       // stops
 uniform float uWbRed;          // multipliers, 1.0 = neutral
 uniform float uWbBlue;
-uniform float uDrCompress;     // 0 = off, 1 = DR200, 2 = DR400
+uniform float uDrStops;        // log2(DR/100): 0, 1, 2
 uniform float uHighlight;      // -2..+4  (camera steps)
 uniform float uShadow;
 uniform float uColor;          // -4..+4
@@ -46,6 +46,8 @@ uniform float uGrain;          // 0..1
 uniform float uGrainSize;      // px
 uniform vec2  uResolution;
 uniform float uSeed;
+uniform vec2  uCropOrigin;   // active area, normalised texture coords
+uniform vec2  uCropSize;
 
 // ---- helpers --------------------------------------------------------------
 
@@ -103,9 +105,11 @@ float hash(vec2 p) {
 }
 
 void main() {
-  // The one and only orientation correction: LibRaw's buffer is top-down,
-  // the framebuffer is bottom-up. Everything downstream stays in canvas space.
-  vec3 c = texture(uImage, vec2(vUv.x, 1.0 - vUv.y)).rgb;
+  // Two corrections in one lookup: crop away the masked sensor border, and
+  // flip y because LibRaw's buffer is top-down while the framebuffer is
+  // bottom-up. Everything downstream stays in cropped canvas space.
+  vec2 src = uCropOrigin + vec2(vUv.x, 1.0 - vUv.y) * uCropSize;
+  vec3 c = texture(uImage, src).rgb;
 
   // --- scene-referred stage -------------------------------------------------
   c *= exp2(uExposure);
@@ -113,12 +117,23 @@ void main() {
   c.b *= uWbBlue;
   c = max(c, 0.0);
 
-  // Dynamic range: the camera underexposes at capture and lifts afterwards.
-  // Working from raw we can only reshape what was recorded, so we compress the
-  // highlights and lift back to keep midtone brightness constant.
-  if (uDrCompress > 0.0) {
-    c = shoulder(c, uDrCompress * 0.75);
-    c *= exp2(uDrCompress * 0.28);
+  // Dynamic range.
+  //
+  // DR200/400 underexpose the sensor by 1/2 stops at capture to buy highlight
+  // headroom. LibRaw then normalises the raw to sensor saturation, which undoes
+  // exactly that offset — so the decoded midtones arrive log2(DR/100) stops too
+  // bright and we have to put them back before shaping the highlights.
+  //
+  // Measured, not guessed: sweeping exposure against the camera's own JPEG on
+  // DR200 frames puts the L* bias at zero at -1.00 stops. See
+  // tools/ground-truth.mjs.
+  // The camera does not simply drop a stop, it lifts the midtones part of the
+  // way back while leaving the highlights compressed. Sweeping exposure against
+  // the camera JPEG on DR200 frames zeroes the L* bias at -2/3 of a stop, i.e.
+  // a full stop down plus a third of a stop of midtone lift per DR step.
+  if (uDrStops > 0.0) {
+    c *= exp2(-uDrStops * 0.667);
+    c = shoulder(c, uDrStops * 0.5);
   }
 
   // --- look stage -----------------------------------------------------------

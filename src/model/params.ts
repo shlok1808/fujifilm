@@ -14,7 +14,8 @@ export interface RenderParams {
   exposure: number;
   wbRed: number;
   wbBlue: number;
-  drCompress: number;
+  /** log2(DR/100): 0 for DR100, 1 for DR200, 2 for DR400 */
+  drStops: number;
   highlight: number;
   shadow: number;
   color: number;
@@ -97,7 +98,7 @@ export function recipeToParams(recipe: Recipe, seed = 0): RenderParams {
     exposure: recipe.exposureComp ?? 0,
     wbRed,
     wbBlue,
-    drCompress: recipe.dynamicRange === 400 ? 2 : recipe.dynamicRange === 200 ? 1 : 0,
+    drStops: Math.log2(recipe.dynamicRange / 100),
     highlight: recipe.highlight,
     shadow: recipe.shadow,
     color: mono ? 0 : recipe.color,

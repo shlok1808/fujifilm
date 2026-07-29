@@ -26,6 +26,41 @@ export interface DecodedImage {
   height: number;
   /** orientation flag from the raw file (LibRaw `flip` semantics) */
   flip: number;
+  /**
+   * The active image area within `data`, in decoded pixels. LibRaw hands back
+   * the full sensor readout including the masked border (4934x3296 on an X-T1
+   * rather than the nominal 4896x3262), which shows up as a dark strip along
+   * the edge. Everything downstream renders this rectangle only.
+   */
+  crop: { x: number; y: number; width: number; height: number };
+}
+
+interface LibRawCropMeta {
+  left_margin?: number;
+  top_margin?: number;
+  raw_inset_crops?: Array<{ cleft: number; ctop: number; cwidth: number; cheight: number }>;
+}
+
+/**
+ * Resolve the active area. `raw_inset_crops` is expressed in raw sensor
+ * coordinates, while the decoded buffer already has the margins removed, so the
+ * inset has to be rebased by the margin before use. Falls back to the whole
+ * frame whenever the metadata is missing or implausible.
+ */
+function activeArea(meta: LibRawCropMeta | null, width: number, height: number, halfSize: boolean) {
+  const full = { x: 0, y: 0, width, height };
+  const inset = meta?.raw_inset_crops?.[0];
+  if (!inset || !inset.cwidth || !inset.cheight) return full;
+  if (inset.cleft > 0xffff || inset.ctop > 0xffff) return full;
+
+  const scale = halfSize ? 0.5 : 1;
+  const x = Math.round((inset.cleft - (meta?.left_margin ?? 0)) * scale);
+  const y = Math.round((inset.ctop - (meta?.top_margin ?? 0)) * scale);
+  const w = Math.round(inset.cwidth * scale);
+  const h = Math.round(inset.cheight * scale);
+
+  if (x < 0 || y < 0 || x + w > width || y + h > height) return full;
+  return { x, y, width: w, height: h };
 }
 
 export interface LoadedRaf {
@@ -71,11 +106,13 @@ async function decode(bytes: Uint8Array, settings: object): Promise<DecodedImage
     if (!(data instanceof Uint16Array)) {
       data = new Uint16Array(data.buffer, data.byteOffset, data.byteLength / 2);
     }
+    const halfSize = (settings as { halfSize?: boolean }).halfSize === true;
     return {
       data: data as Uint16Array,
       width: img.width,
       height: img.height,
       flip: (meta as { flip?: number } | null)?.flip ?? 0,
+      crop: activeArea(meta as LibRawCropMeta | null, img.width, img.height, halfSize),
     };
   } finally {
     raw.dispose();

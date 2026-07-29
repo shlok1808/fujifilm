@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { loadRaf, type LoadedRaf } from './decode/decodeRaf';
 import { Renderer } from './gpu/renderer';
+import { loadLut } from './gpu/lut';
 import { recipeToParams } from './model/params';
 import {
   CAMERA_GEN_CAPS, DEFAULT_RECIPE, FILM_SIM_LABELS,
@@ -19,6 +20,8 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [showReference, setShowReference] = useState(false);
   const [referenceUrl, setReferenceUrl] = useState<string | null>(null);
+  // bumped whenever a LUT finishes loading, to retrigger the render effect
+  const [lutReady, setLutReady] = useState(0);
 
   // --- file loading ---------------------------------------------------------
   const openFile = useCallback(async (file: File) => {
@@ -67,12 +70,34 @@ export default function App() {
     rendererRef.current = null;
   }, []);
 
+  // Load the LUT for the selected simulation. Cached, so switching back and
+  // forth is instant after the first fetch.
+  useEffect(() => {
+    let cancelled = false;
+    const pending = loadLut(recipe.filmSim);
+    if (!pending) {
+      rendererRef.current?.setLut(null);
+      setLutReady((n) => n + 1);
+      return;
+    }
+    pending
+      .then((lut) => {
+        if (cancelled) return;
+        rendererRef.current?.setLut(lut);
+        setLutReady((n) => n + 1);
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
+      });
+    return () => { cancelled = true; };
+  }, [recipe.filmSim]);
+
   // Re-render on every parameter change — this is the live path.
   useEffect(() => {
     const r = rendererRef.current;
     if (!r || !raf) return;
     r.render(recipeToParams(recipe));
-  }, [recipe, raf]);
+  }, [recipe, raf, lutReady]);
 
   const onDrop = useCallback(
     (e: React.DragEvent) => {

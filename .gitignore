@@ -26,3 +26,6 @@ dist-ssr
 # local test artefacts
 *.local.png
 /tools/*.png
+
+# generated from luts/*.cube by tools/build-luts.mjs
+/public/luts/

@@ -61,6 +61,7 @@ export class Renderer {
   private targets: Target[] = [];
   private imgW = 0;
   private imgH = 0;
+  private crop = { x: 0, y: 0, width: 0, height: 0 };
 
   constructor(canvas: HTMLCanvasElement | OffscreenCanvas) {
     const gl = canvas.getContext('webgl2', {
@@ -132,6 +133,7 @@ export class Renderer {
     this.imageTex = tex;
     this.imgW = img.width;
     this.imgH = img.height;
+    this.crop = img.crop;
     this.disposeTargets();
   }
 
@@ -161,9 +163,12 @@ export class Renderer {
     this.lutSize = lut.size;
   }
 
-  /** LibRaw has already applied orientation, so this is just the decoded size. */
+  /**
+   * LibRaw has already applied orientation, so the output is simply the active
+   * area — the masked sensor border is cropped away during sampling.
+   */
   get outputSize(): { width: number; height: number } {
-    return { width: this.imgW, height: this.imgH };
+    return { width: this.crop.width || this.imgW, height: this.crop.height || this.imgH };
   }
 
   private makeTarget(w: number, h: number): Target {
@@ -234,7 +239,7 @@ export class Renderer {
     gl.uniform1f(u('uExposure'), params.exposure);
     gl.uniform1f(u('uWbRed'), params.wbRed);
     gl.uniform1f(u('uWbBlue'), params.wbBlue);
-    gl.uniform1f(u('uDrCompress'), params.drCompress);
+    gl.uniform1f(u('uDrStops'), params.drStops);
     gl.uniform1f(u('uHighlight'), params.highlight);
     gl.uniform1f(u('uShadow'), params.shadow);
     gl.uniform1f(u('uColor'), params.color);
@@ -247,6 +252,8 @@ export class Renderer {
     gl.uniform1f(u('uGrainSize'), params.grainSize);
     gl.uniform2f(u('uResolution'), outW, outH);
     gl.uniform1f(u('uSeed'), params.seed);
+    gl.uniform2f(u('uCropOrigin'), this.crop.x / this.imgW, this.crop.y / this.imgH);
+    gl.uniform2f(u('uCropSize'), this.crop.width / this.imgW, this.crop.height / this.imgH);
 
     if (!needsDetail) {
       this.drawTo(null, outW, outH);

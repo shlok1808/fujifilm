@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "build:luts": "node tools/build-luts.mjs",
+    "prebuild": "node tools/build-luts.mjs"
   },
   "dependencies": {
     "libraw-wasm": "^1.6.0",
