@@ -9,11 +9,12 @@ import {
 } from './model/recipe';
 import { parseRecipeText, recipeFromLocation, shareUrl } from './model/share';
 import { ParamPanel } from './ui/ParamPanel';
-import { CompareView, type ViewMode } from './ui/CompareView';
+import { CompareView, MAX_PANES, type ViewMode } from './ui/CompareView';
 import './App.css';
 
 export default function App() {
   const hostRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const rendererRef = useRef<Renderer | null>(null);
   const [renderer, setRenderer] = useState<Renderer | null>(null);
 
@@ -21,6 +22,11 @@ export default function App() {
   const [recipe, setRecipe] = useState<Recipe>(() => recipeFromLocation() ?? DEFAULT_RECIPE);
   const [mode, setMode] = useState<ViewMode>('single');
   const [compareIds, setCompareIds] = useState<string[]>(['lab-standard', 'fxw-xt1-classic-chrome']);
+  /** compare saved recipes, or the same recipe across different film simulations */
+  const [compareSource, setCompareSource] = useState<'recipes' | 'sims'>('sims');
+  const [compareSims, setCompareSims] = useState<FilmSim[]>(
+    ['provia', 'velvia', 'classic-chrome', 'astia'],
+  );
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -89,20 +95,43 @@ export default function App() {
     [recipe],
   );
 
+  const maxPanes = mode === 'split' ? 2 : MAX_PANES;
+
   const paneRecipes = useMemo(() => {
     if (mode === 'single') return [recipe];
-    const picked = compareIds
-      .map((id) => allRecipes.find((r) => r.id === id))
-      .filter((r): r is Recipe => Boolean(r));
-    if (picked.length < 2) return [recipe, RECIPE_LIBRARY[0]];
-    return mode === 'split' ? picked.slice(0, 2) : picked.slice(0, 4);
-  }, [mode, compareIds, allRecipes, recipe]);
+
+    // Comparing simulations keeps every one of your other settings fixed and
+    // varies only the film simulation, which is the question people actually ask.
+    const picked: Recipe[] = compareSource === 'sims'
+      ? compareSims.map((sim) => ({
+          ...recipe,
+          filmSim: sim,
+          id: `sim-${sim}`,
+          name: FILM_SIM_LABELS[sim],
+        }))
+      : compareIds
+          .map((id) => allRecipes.find((r) => r.id === id))
+          .filter((r): r is Recipe => Boolean(r));
+
+    if (picked.length < 2) {
+      return compareSource === 'sims'
+        ? [recipe, { ...recipe, filmSim: 'provia' as FilmSim, id: 'sim-provia', name: FILM_SIM_LABELS.provia }]
+        : [recipe, RECIPE_LIBRARY[0]];
+    }
+    return picked.slice(0, maxPanes);
+  }, [mode, compareSource, compareSims, compareIds, allRecipes, recipe, maxPanes]);
 
   const toggleCompare = (id: string) => {
     setCompareIds((prev) => {
       if (prev.includes(id)) return prev.length <= 2 ? prev : prev.filter((p) => p !== id);
-      const max = mode === 'split' ? 2 : 4;
-      return prev.length >= max ? [...prev.slice(1), id] : [...prev, id];
+      return prev.length >= maxPanes ? [...prev.slice(1), id] : [...prev, id];
+    });
+  };
+
+  const toggleSim = (sim: FilmSim) => {
+    setCompareSims((prev) => {
+      if (prev.includes(sim)) return prev.length <= 2 ? prev : prev.filter((p) => p !== sim);
+      return prev.length >= maxPanes ? [...prev.slice(1), sim] : [...prev, sim];
     });
   };
 
@@ -162,12 +191,23 @@ export default function App() {
       {busy && <div className="busy">{busy}</div>}
       {toast && <div className="toast">{toast}</div>}
 
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".raf,.RAF"
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) void openFile(f);
+          e.target.value = ''; // allow re-picking the same file
+        }}
+      />
+
       {!raf && (
-        <label className="dropzone">
-          <input type="file" accept=".raf,.RAF" onChange={(e) => { const f = e.target.files?.[0]; if (f) void openFile(f); }} />
+        <button className="dropzone" onClick={() => fileInputRef.current?.click()}>
           <strong>Drop a .RAF file here</strong>
           <span>or click to choose · everything stays in your browser</span>
-        </label>
+        </button>
       )}
 
       {status && <div className="status">{status}</div>}
@@ -184,28 +224,77 @@ export default function App() {
               onError={setError}
             />
             {mode !== 'single' && (
-              <div className="picker">
-                <span className="picker-hint">
-                  {mode === 'split' ? 'Pick two to compare' : 'Pick up to four'}
-                </span>
-                {allRecipes.map((r) => (
-                  <button
-                    key={r.id}
-                    className={compareIds.includes(r.id) ? 'chip on' : 'chip'}
-                    onClick={() => toggleCompare(r.id)}
-                    title={r.author ? `${r.name} — ${r.author}` : r.name}
-                  >
-                    {r.name}
-                  </button>
-                ))}
+              <div className="picker-panel">
+                <div className="picker-head">
+                  <div className="segmented">
+                    <button
+                      className={compareSource === 'sims' ? 'on' : ''}
+                      onClick={() => setCompareSource('sims')}
+                    >
+                      Film simulations
+                    </button>
+                    <button
+                      className={compareSource === 'recipes' ? 'on' : ''}
+                      onClick={() => setCompareSource('recipes')}
+                    >
+                      Saved recipes
+                    </button>
+                  </div>
+                  <span className="picker-hint">
+                    {mode === 'split'
+                      ? 'pick two'
+                      : `pick up to ${MAX_PANES} · ${paneRecipes.length} shown`}
+                  </span>
+                </div>
+
+                <div className="picker">
+                  {compareSource === 'sims'
+                    ? (Object.keys(FILM_SIM_LABELS) as FilmSim[]).map((sim) => (
+                        <button
+                          key={sim}
+                          className={compareSims.includes(sim) ? 'chip on' : 'chip'}
+                          onClick={() => toggleSim(sim)}
+                          title={caps && !caps.sims.has(sim)
+                            ? `${FILM_SIM_LABELS[sim]} — not available on your ${raf.model}, rendered anyway`
+                            : FILM_SIM_LABELS[sim]}
+                        >
+                          {FILM_SIM_LABELS[sim]}
+                          {caps && !caps.sims.has(sim) && <em className="off-body">*</em>}
+                        </button>
+                      ))
+                    : allRecipes.map((r) => (
+                        <button
+                          key={r.id}
+                          className={compareIds.includes(r.id) ? 'chip on' : 'chip'}
+                          onClick={() => toggleCompare(r.id)}
+                          title={r.author ? `${r.name} — ${r.author}` : r.name}
+                        >
+                          {r.name}
+                        </button>
+                      ))}
+                </div>
+
+                {compareSource === 'sims' && (
+                  <p className="picker-note">
+                    Every pane keeps your current settings and changes only the simulation.
+                    <em>*</em> marks looks your {raf.model} can't shoot in-camera.
+                  </p>
+                )}
               </div>
             )}
           </div>
 
           <aside>
             <div className="meta">
-              <div><b>{raf.model}</b> · firmware {raf.firmware}</div>
-              <div className="dim">{caps?.label} · {raf.fileName}</div>
+              <div className="meta-head">
+                <div>
+                  <div><b>{raf.model}</b> · firmware {raf.firmware}</div>
+                  <div className="dim">{caps?.label} · {raf.fileName}</div>
+                </div>
+                <button className="ghost small" onClick={() => fileInputRef.current?.click()}>
+                  Change photo
+                </button>
+              </div>
             </div>
 
             <div className="row">

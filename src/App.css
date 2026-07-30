@@ -111,12 +111,25 @@ header .sub { margin: 8px 0 0; color: var(--dim); max-width: 46ch; }
 .workspace { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 24px; align-items: start; }
 
 /* --- viewer -------------------------------------------------------------- */
+/*
+ * The viewer box hugs the canvas (`fit-content`) rather than filling the column,
+ * so the absolutely-positioned overlays — pane labels, the split handle — stay
+ * aligned to the picture instead of to the column. The canvas itself is capped
+ * to the viewport height so a whole frame is visible without scrolling; the
+ * intrinsic aspect from its width/height attributes keeps the scaling correct.
+ */
 .viewer {
   position: relative; background: #14110d; border-radius: var(--radius); overflow: hidden;
   border: 1px solid var(--line-strong);
   box-shadow: var(--shadow), inset 0 0 0 1px rgba(0,0,0,.35);
+  width: fit-content; max-width: 100%; margin: 0 auto;
 }
-.viewer canvas { display: block; width: 100%; height: auto; }
+.viewer canvas {
+  display: block;
+  width: auto; height: auto;
+  max-width: 100%;
+  max-height: var(--viewer-max-h, calc(100vh - 230px));
+}
 .viewer .reference {
   position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #14110d;
 }
@@ -292,3 +305,28 @@ legend {
   header { flex-direction: column; align-items: stretch; }
   header h1 { font-size: 28px; }
 }
+
+/* --- compare picker (source toggle + chips) ------------------------------ */
+.picker-panel { margin-top: 14px; display: flex; flex-direction: column; gap: 10px; }
+.picker-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.segmented {
+  display: flex; gap: 2px; padding: 3px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 999px;
+}
+.segmented button {
+  background: transparent; border: 0; border-radius: 999px; cursor: pointer;
+  padding: 6px 14px; font: inherit; font-size: 13px; color: var(--dim);
+}
+.segmented button.on { background: var(--accent); color: #fff; }
+.segmented button:not(.on):hover { color: var(--text); }
+
+.picker-note { margin: 0; color: var(--dim); font-size: 12px; }
+.picker-note em { font-style: normal; color: var(--accent); font-weight: 600; }
+.chip .off-body { font-style: normal; color: var(--accent); margin-left: 3px; font-weight: 600; }
+
+/* --- change photo -------------------------------------------------------- */
+.meta-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.ghost.small { flex: 0 0 auto; padding: 6px 12px; font-size: 12px; white-space: nowrap; }
+
+/* the drop zone is a button now, so it can share the one file input */
+button.dropzone { width: 100%; font: inherit; text-align: center; }

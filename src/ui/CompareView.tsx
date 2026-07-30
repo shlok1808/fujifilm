@@ -18,12 +18,16 @@ interface Props {
   onError: (message: string) => void;
 }
 
-/** Grid shape for n panes: 2 side by side, 3-4 as a 2x2. */
-function gridShape(n: number): { cols: number; rows: number } {
+/** Grid shape for n panes, kept as square as possible. */
+export function gridShape(n: number): { cols: number; rows: number } {
   if (n <= 1) return { cols: 1, rows: 1 };
   if (n === 2) return { cols: 2, rows: 1 };
-  return { cols: 2, rows: 2 };
+  if (n <= 4) return { cols: 2, rows: 2 };
+  if (n <= 6) return { cols: 3, rows: 2 };
+  return { cols: 3, rows: 3 };
 }
+
+export const MAX_PANES = 9;
 
 export function CompareView({ renderer, mode, recipes, revision, referenceUrl, onError }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);

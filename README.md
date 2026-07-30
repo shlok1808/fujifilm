@@ -98,8 +98,15 @@ and should be the single biggest accuracy win available.
 ## Features
 
 - **Single / Compare / Slider** views. The RAW is decoded once and every pane is a GPU
-  draw call against that same texture, so a four-way comparison costs no more decoding
+  draw call against that same texture, so a nine-way comparison costs no more decoding
   than a single view.
+- **Compare up to 9 panes**, choosing either saved recipes or — more usefully — any of
+  the 20 film simulations with all your other settings held fixed, so you are varying
+  one thing at a time.
+- **Swap photos at any time** without reloading; the recipe you are working on carries
+  over to the new frame.
+- Whole frame always visible: the canvas is capped to the viewport height, so you never
+  have to scroll to see the picture.
 - **Reads the recipe a frame was shot with** from the Fujifilm MakerNote and starts you
   there.
 - **Hold to compare against the camera's own JPEG** — the honest reference.
@@ -134,6 +141,7 @@ node tools/smoke.mjs             # decode a real RAF end to end, screenshot it
 node tools/orientation-check.mjs # assert the image isn't upside down
 node tools/modes-check.mjs       # screenshot all three view modes
 node tools/features-check.mjs    # paste, share round trip, full-res export
+node tools/ui-check.mjs          # photo swapping and the compare picker
 node tools/sim-compare.mjs       # confirm the simulations actually differ
 node tools/ground-truth.mjs      # dE against the camera's own JPEG
 ```
